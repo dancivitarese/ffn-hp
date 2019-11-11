@@ -222,10 +222,15 @@ if __name__ == '__main__':
                         help='Path to where trained model is.')
     parser.add_argument('--segy_path', type=str,
                         help='Path to where the segy is.')
-    parser.add_argument('--horizons_path_list', type=str,
+    parser.add_argument('--horizons_path_list', type=str, nargs='+',
                         help='Path to the directory containing the input SEGY.')
-    parser.add_argument('--output_dir', type=str,
+    parser.add_argument('--output_path', type=str,
                         help='Directory where to save output SEGY.')
+    parser.add_argument('--gpu_id', type=int,
+                        help='Which GPU TensorFlow will use.')
 
     params = parser.parse_args()
-    predict(params.model_path, params.segy_path, eval(params.horizons_path_list), params.output_dir)
+    gpus = tf.config.experimental.list_physical_devices('GPU')
+    tf.config.experimental.set_visible_devices(gpus[params.gpu_id], 'GPU')
+
+    predict(params.model_path, params.segy_path, params.horizons_path_list, params.output_path)
