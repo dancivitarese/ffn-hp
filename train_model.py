@@ -139,6 +139,7 @@ def train_model(hdf5_train_path: str,
     train_metrics = {'train_mean_iou': MeanIoU(), 'train_cat_acc': tf.keras.metrics.CategoricalAccuracy()}
     val_metrics = {'val_mean_iou': MeanIoU(), 'val_cat_acc': tf.keras.metrics.CategoricalAccuracy()}
     metrics = (train_metrics, val_metrics)
+
     model = training_loop(train_dataset, test_dataset, model, model_path, optimizer, loss_fn, metrics, epochs=30)
     model.save(f'{model_path}.h5')
 
@@ -150,22 +151,18 @@ if __name__ == '__main__':
 
     parser.add_argument('--train_db_path', type=str,
                         help='Path to HDF5 training dataset.')
-    parser.add_argument('--valid_db_path', type=str,
-                        help='Path to HDF5 validation dataset.')
+    parser.add_argument('--test_db_path', type=str,
+                        help='Path to HDF5 test dataset.')
     parser.add_argument('--model_path', type=str,
                         help='Directory where to save trained model.')
-    parser.add_argument('--gpus', nargs='+', type=int)
+    parser.add_argument('--gpu_id', type=int,
+                        help='Which GPU TensorFlow will use.')
 
+    args = parser.parse_args()
     gpus = tf.config.experimental.list_physical_devices('GPU')
-    if gpus:
-        try:
-            tf.config.experimental.set_visible_devices(gpus[0], 'GPU')
-            logical_gpus = tf.config.experimental.list_logical_devices('GPU')
-            print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPU")
-        except RuntimeError as e:
-            print(e)
+    tf.config.experimental.set_visible_devices(gpus[args.gpu_id], 'GPU')
 
-    train_model(hdf5_train_path='',
-                hdf5_test_path='',
-                model_path='',
+    train_model(hdf5_train_path=args.train_db_path,
+                hdf5_test_path=args.test_db_path,
+                model_path=args.model_path,
                 loss_fn=tf.keras.losses.CategoricalCrossentropy(reduction=tf.keras.losses.Reduction.NONE))
