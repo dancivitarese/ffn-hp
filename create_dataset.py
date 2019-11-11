@@ -1,10 +1,12 @@
 import argparse
 import os
 import time
+from typing import Tuple
 
 import h5py
 import numpy as np
 import tensorflow as tf
+import yaml
 
 import utils
 
@@ -19,7 +21,7 @@ class Generator:
                 yield feature, label
 
 
-def read_hdf(hdf5_path: str):
+def read_hdf(hdf5_path: str) -> tf.data.Dataset:
     ds = tf.data.Dataset.from_generator(
         Generator(hdf5_path),
         (np.uint8, np.uint8),
@@ -128,9 +130,9 @@ def get_number_tiles(image_size: int,
     return int(((image_size - (init_col - int(tile_size / 2))) - tile_size) / stride) + 1
 
 
-def prepare_sliding_window_binary_data(dt: tf.data.Dataset,
-                                       dataset: tf.data.Dataset,
-                                       break_tiles_info,
+def prepare_sliding_window_binary_data(dataset: tf.data.Dataset,
+                                       break_tiles_info: Tuple[int, int, int],
+                                       num_records: int,
                                        num_classes: int,
                                        num_horizons: int = 8):
     size = break_tiles_info[1]
@@ -138,12 +140,8 @@ def prepare_sliding_window_binary_data(dt: tf.data.Dataset,
 
     num_tiles = get_number_tiles(951, 150, size, stride)
 
-    dataset_size = 0
-    for i, l in dt:
-        dataset_size += 1
-
-    batch_input = [None] * num_tiles * dataset_size * (num_horizons - 1)
-    batch_label = [None] * num_tiles * dataset_size * (num_horizons - 1)
+    batch_input = [None] * num_tiles * num_records * (num_horizons - 1)
+    batch_label = [None] * num_tiles * num_records * (num_horizons - 1)
 
     idx = 0
     count = 0
@@ -153,7 +151,7 @@ def prepare_sliding_window_binary_data(dt: tf.data.Dataset,
         tf_label_0 = tf.reshape(label, [feat.shape[0], feat.shape[1]])
 
         count += 1
-        print(f"\tProcessing inline: [{count}/{dataset_size}]")
+        print(f"\tProcessing inline: [{count}/{num_records}]")
 
         model_input_list, mini_label_list = line2tiles(tf_feat_0, tf_label_0, size, stride,
                                                        num_horizons)
@@ -180,12 +178,12 @@ def save_hdf(output_path: str,
     h5f.close()
 
 
-def create_dataset(hdf5_train_path: str,
-                   hdf5_test_path: str,
+def create_dataset(dataset_path: str,
                    output_path: str):
     start = time.time()
-    train_set = read_hdf(hdf5_train_path)
-    test_set = read_hdf(hdf5_test_path)
+    train_set = read_hdf(os.path.join(dataset_path, 'train.h5'))
+    test_set = read_hdf(os.path.join(dataset_path, 'test.h5'))
+    ds_info = yaml.safe_load(open(os.path.join(dataset_path, 'dataset_log.txt')))
 
     input_shape = (64, 64, 2)
     num_classes = 2
@@ -196,10 +194,14 @@ def create_dataset(hdf5_train_path: str,
 
     break_tiles_info = (seed, size, stride)
 
-    train_tiles_input, train_tiles_label = prepare_sliding_window_binary_data(read_hdf(hdf5_train_path), train_set,
-                                                                              break_tiles_info, num_classes)
-    test_tiles_input, test_tiles_label = prepare_sliding_window_binary_data(read_hdf(hdf5_test_path), test_set,
-                                                                            break_tiles_info, num_classes)
+    train_tiles_input, train_tiles_label = prepare_sliding_window_binary_data(train_set,
+                                                                              break_tiles_info,
+                                                                              ds_info['train_records'],
+                                                                              num_classes)
+    test_tiles_input, test_tiles_label = prepare_sliding_window_binary_data(test_set,
+                                                                            break_tiles_info,
+                                                                            ds_info['test_records'],
+                                                                            num_classes)
 
     utils.makedir(output_path)
     save_hdf(os.path.join(output_path, 'train.h5'), train_tiles_input, train_tiles_label)
@@ -210,12 +212,10 @@ def create_dataset(hdf5_train_path: str,
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--train_path', type=str,
+    parser.add_argument('--dataset_path', type=str,
                         help='Path to the train HDF5 file.')
-    parser.add_argument('--test_path', type=str,
-                        help='Path to the test HDF5 file.')
     parser.add_argument('--output_dir', type=str,
                         help='Path to the output train and test HDF5 dataset files.')
 
     args = parser.parse_args()
-    create_dataset(args.train_path, args.test_path, args.output_dir)
+    create_dataset(args.dataset_path, args.output_dir)
