@@ -1,7 +1,8 @@
+import argparse
 import os
 import time
+
 import h5py
-import argparse
 import numpy as np
 import tensorflow as tf
 from PIL import Image
