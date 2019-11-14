@@ -7,8 +7,11 @@ import h5py
 import numpy as np
 import tensorflow as tf
 import yaml
+from numba import jit
 
 import utils
+
+NUM_CLASSES = 2
 
 
 class Generator:
@@ -123,6 +126,7 @@ def line2tiles(feat: tf.Tensor,
     return model_input_list, mini_label_list
 
 
+@jit(nopython=True)
 def get_number_tiles(image_size: int,
                      init_col: int,
                      tile_size: int,
@@ -178,15 +182,14 @@ def save_hdf(output_path: str,
     h5f.close()
 
 
-def create_dataset(dataset_path: str,
-                   output_path: str):
+def create_dataset(params: argparse.Namespace):
     start = time.time()
-    train_set = read_hdf(os.path.join(dataset_path, 'train.h5'))
-    test_set = read_hdf(os.path.join(dataset_path, 'test.h5'))
-    ds_info = yaml.safe_load(open(os.path.join(dataset_path, 'dataset_log.txt')))
+    train_set = read_hdf(os.path.join(params.dataset_path, 'train.h5'))
+    test_set = read_hdf(os.path.join(params.dataset_path, 'test.h5'))
+    ds_info = yaml.safe_load(open(os.path.join(params.dataset_path, 'dataset_log.txt')))
 
-    input_shape = (64, 64, 2)
-    num_classes = 2
+    input_shape = params.tile_shape + [2, ]
+    num_classes = NUM_CLASSES
 
     seed = 0
     size = input_shape[0]
@@ -203,9 +206,9 @@ def create_dataset(dataset_path: str,
                                                                             ds_info['test_records'],
                                                                             num_classes)
 
-    utils.makedir(output_path)
-    save_hdf(os.path.join(output_path, 'train.h5'), train_tiles_input, train_tiles_label)
-    save_hdf(os.path.join(output_path, 'test.h5'), test_tiles_input, test_tiles_label)
+    utils.makedir(params.output_path)
+    save_hdf(os.path.join(params.output_path, 'train.h5'), train_tiles_input, train_tiles_label)
+    save_hdf(os.path.join(params.output_path, 'test.h5'), test_tiles_input, test_tiles_label)
 
     print(f"Total time for dataset generation: {time.time() - start}")
 
@@ -217,5 +220,13 @@ if __name__ == '__main__':
     parser.add_argument('--output_dir', type=str,
                         help='Path to the output train and test HDF5 dataset files.')
 
+    parser.add_argument('--tile_shape', nargs=2, type=int,
+                        help='Shape of the tile in the order: *tile_height*, *tile_width*. Ex: 40 40')
+    parser.add_argument('--strides', nargs=2, type=int,
+                        help='How many pixels the algorithm will skip in the height and width '
+                             'directions before getting the next tile. Please, notice that if '
+                             'stride is smaller than *tile_height* or *tile_width* it will '
+                             'produce overlapping images. Ex: 10 30')
+
     args = parser.parse_args()
-    create_dataset(args.dataset_path, args.output_dir)
+    create_dataset(args)
