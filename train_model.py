@@ -40,6 +40,7 @@ def training_loop(train_dataset: tf.data.Dataset,
     val_metrics = metrics[1]
 
     # Iterate over epochs.
+    best = 0.0
     for epoch in range(epochs):
         print('Start of epoch %d' % (epoch,))
         epoch_loss = 0
@@ -78,21 +79,19 @@ def training_loop(train_dataset: tf.data.Dataset,
         # Run a validation loop at the end of each epoch.
         for x_batch_val, y_batch_val in val_dataset:
             val_logits = model(x_batch_val)
-            # val_loss_value = loss_fn(y_batch_val, val_logits)
-            # Update val metrics
             for metric in val_metrics.values():
                 metric(y_batch_val, val_logits)
 
+        metric_dict = {}
         for metric_name, metric in val_metrics.items():
-            print(f"| {metric_name}: {metric.result()} ", end="", flush=True)
+            metric_dict[metric_name] = metric.result().numpy()
+            print(f"| {metric_name}: {metric_dict[metric_name]} ", end="", flush=True)
             metric.reset_states()
         print("|")
         # print('Validation acc: %s' % (float(val_acc),))
 
-        model.save(f'{model_path}_{epoch}.h5')
-        is_best = False
-        if is_best:
-            model.save(model_path)
+        if best < metric_dict[metric_name]:
+            model.save(f'{model_path}_best.h5')
 
     return model
 
