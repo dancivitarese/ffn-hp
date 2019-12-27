@@ -6,11 +6,13 @@ from typing import Tuple
 import h5py
 import numpy as np
 import tensorflow as tf
-from numba import jit
 
 import utils
 
 NUM_CLASSES = 2
+tf.config.experimental_run_functions_eagerly(False)
+physical_devices = tf.config.experimental.list_physical_devices('CPU')
+tf.config.experimental.set_visible_devices(physical_devices)
 
 
 class Generator:
@@ -44,7 +46,7 @@ def create_seeds(label: tf.Tensor,
     last_seed = 0
     horizon_depths = [None] * (num_classes - 1)
     for idx, seed_class in enumerate(range(num_classes - 1)):
-        depth = np.argmax(label[:, column][last_seed:] > 0) + 1 + last_seed
+        depth = int(np.argmax(label[:, column][last_seed:] > 0) + 1 + last_seed)
         last_seed = depth + 2
 
         vertical_coordinate = depth - int(size / 2)
@@ -56,7 +58,7 @@ def create_seeds(label: tf.Tensor,
         elif vertical_coordinate + size > label.shape[0]:
             vertical_coordinate = label.shape[0] - size
 
-        # protecting for vertical axis out of bound
+        # protecting for horizontal axis out of bound
         if horizontal_coordinate < 0:
             horizontal_coordinate = 0
         elif horizontal_coordinate + size > label.shape[1]:
@@ -74,13 +76,12 @@ def line2tiles(feat: tf.Tensor,
                stride: int,
                num_classes: int):
     init_col = 150
-    number_tiles = get_number_tiles(feat.shape[1], init_col, size, stride)
+    number_tiles = int(get_number_tiles(feat.shape[1], init_col, size, stride))
 
     model_input_list = [None] * number_tiles * (num_classes - 1)
     mini_label_list = [None] * number_tiles * (num_classes - 1)
 
     top_left_positions = [None] * number_tiles
-
     las_img_begin = feat.shape[1] - int(size / 2)
     for i, c in enumerate(range(init_col, las_img_begin, stride)):
         top_left_positions[i] = create_seeds(label, num_classes, size, column=c)
@@ -111,12 +112,14 @@ def line2tiles(feat: tf.Tensor,
 
             if vertical_diff > 0:
                 # horizontal zeros
-                mini_input_tile = mini_input_tile[:vertical_diff, :].assign(tf.zeros((np.abs(vertical_diff), size),
-                                                                                     tf.uint8))
+                mini_input_tile = mini_input_tile[:vertical_diff, :].assign(
+                    tf.zeros((tf.math.abs(vertical_diff), size), tf.uint8)
+                )
             elif vertical_diff < 0:
                 # horizontal zeros
-                mini_input_tile = mini_input_tile[vertical_diff:, :].assign(tf.zeros((np.abs(vertical_diff), size),
-                                                                                     tf.uint8))
+                mini_input_tile = mini_input_tile[vertical_diff:, :].assign(
+                    tf.zeros((tf.math.abs(vertical_diff), size), tf.uint8)
+                )
 
             # vertical zeros
             mini_input_tile = mini_input_tile[:, -stride:].assign(tf.zeros((size, stride), tf.uint8))
@@ -129,7 +132,10 @@ def line2tiles(feat: tf.Tensor,
     return model_input_list, mini_label_list
 
 
-@jit(nopython=True)
+@tf.function(input_signature=[tf.TensorSpec(shape=None, dtype=tf.int32),
+                              tf.TensorSpec(shape=None, dtype=tf.int32),
+                              tf.TensorSpec(shape=None, dtype=tf.int32),
+                              tf.TensorSpec(shape=None, dtype=tf.int32)])
 def get_number_tiles(image_size: int,
                      init_col: int,
                      tile_size: int,
@@ -147,8 +153,8 @@ def view_as_window(dataset: tf.data.Dataset,
 
     num_tiles = get_number_tiles(ds_shape[2], 150, size, stride)
 
-    batch_input = [None] * num_tiles * ds_shape[0] * (num_horizons - 1)
-    batch_label = [None] * num_tiles * ds_shape[0] * (num_horizons - 1)
+    batch_input = [None] * int(num_tiles) * ds_shape[0] * (num_horizons - 1)
+    batch_label = [None] * int(num_tiles) * ds_shape[0] * (num_horizons - 1)
 
     idx = 0
     count = 0
@@ -162,8 +168,8 @@ def view_as_window(dataset: tf.data.Dataset,
 
         model_input_list, mini_label_list = line2tiles(tf_feat_0, tf_label_0, size, stride,
                                                        num_horizons)
-        np.stack(model_input_list)
-        np.stack(mini_label_list)
+        tf.stack(model_input_list)
+        tf.stack(mini_label_list)
 
         batch_input[idx:(idx + len(model_input_list))] = model_input_list
         batch_label[idx:(idx + len(model_input_list))] = mini_label_list

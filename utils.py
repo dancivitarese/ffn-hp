@@ -17,7 +17,6 @@ def clean_label(label_tile: Union[tf.Tensor, tf.Variable]) -> tf.Tensor:
     label_tile = label_tile.numpy()
     non_zeros = label_tile > 0
     label_tile[non_zeros] = 1
-
     label_tile = tf.convert_to_tensor(label_tile, tf.uint8)
 
     return label_tile

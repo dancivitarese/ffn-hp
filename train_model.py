@@ -113,28 +113,23 @@ def train_model(hdf5_train_path: str,
     """
     start = time.time()
 
-    train_h5_file = h5py.File(hdf5_train_path, 'r')
-    train_tiles_input = np.array(train_h5_file.get('features'))
-    train_tiles_label = np.array(train_h5_file.get('labels'))
+    with h5py.File(hdf5_train_path, 'r') as train_h5_file:
+        train_tiles_input = np.array(train_h5_file.get('features'))
+        train_tiles_label = np.array(train_h5_file.get('labels'))
+        train_dataset = tf.data.Dataset.from_tensor_slices((train_tiles_input, train_tiles_label))
+        train_dataset = train_dataset.shuffle(buffer_size=10192).batch(batch_size=2048)
 
-    train_dataset = tf.data.Dataset.from_tensor_slices((train_tiles_input, train_tiles_label))
-    train_dataset = train_dataset.shuffle(buffer_size=10192).batch(batch_size=2048)
-
-    train_h5_file.close()
-
-    test_h5_file = h5py.File(hdf5_test_path, 'r')
-    test_tiles_input = np.array(test_h5_file.get('features'))
-    test_tiles_label = np.array(test_h5_file.get('labels'))
-
-    test_dataset = tf.data.Dataset.from_tensor_slices((test_tiles_input, test_tiles_label))
-    test_dataset = test_dataset.batch(batch_size=512)
-    test_h5_file.close()
+    with h5py.File(hdf5_test_path, 'r') as test_h5_file:
+        test_tiles_input = np.array(test_h5_file.get('features'))
+        test_tiles_label = np.array(test_h5_file.get('labels'))
+        test_dataset = tf.data.Dataset.from_tensor_slices((test_tiles_input, test_tiles_label))
+        test_dataset = test_dataset.batch(batch_size=512)
 
     input_shape = (64, 64, 2)
     num_classes_output = 2
     model = unet_tf2(input_shape=input_shape, output_channels=num_classes_output)
 
-    optimizer = tf.keras.optimizers.Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=False)
+    optimizer = tf.keras.optimizers.Adam(lr=0.001)
     train_metrics = {'train_mean_iou': MeanIoU(), 'train_cat_acc': tf.keras.metrics.CategoricalAccuracy()}
     val_metrics = {'val_mean_iou': MeanIoU(), 'val_cat_acc': tf.keras.metrics.CategoricalAccuracy()}
     metrics = (train_metrics, val_metrics)

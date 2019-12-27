@@ -4,7 +4,7 @@ from typing import List, Tuple
 
 import numpy as np
 import tensorflow as tf
-from rockml.data.adapter.seismic.segy import SEGYDataAdapter
+from rockml.data.adapter.seismic.segy.poststack import PostStackAdapter2D, Direction
 from rockml.data.transformations.seismic.image import Crop2D, ScaleIntensity, Transformation
 from seisfast.io.horizon import Writer
 
@@ -88,7 +88,7 @@ def run_model(canvas: tf.Tensor,
 
 def predict_line(model: tf.keras.Model,
                  inference_config: dict,
-                 segy: SEGYDataAdapter,
+                 segy: PostStackAdapter2D,
                  line_number: int,
                  crop: Transformation,
                  scale: Transformation,
@@ -96,7 +96,7 @@ def predict_line(model: tf.keras.Model,
     size = inference_config['size']
     stride = inference_config['stride']
 
-    seismic_datum = segy.get_line('inlines', line_number)
+    seismic_datum = segy.get_line(Direction.INLINE, line_number)
     seismic_datum = scale(crop(seismic_datum))
 
     feat = tf.dtypes.cast(seismic_datum.features, tf.uint8, name=None)
@@ -125,7 +125,7 @@ def predict_line(model: tf.keras.Model,
     return raw_amplitudes, horizons
 
 
-def export_horizons(segy: SEGYDataAdapter,
+def export_horizons(segy: PostStackAdapter2D,
                     horizons: np.array,
                     path: str) -> None:
     for cls in horizons.keys():
@@ -180,9 +180,9 @@ def predict(model_path: str,
     inference_config['stride'] = int(input_shape[0] / 8)
 
     # Load SEGY
-    segy = SEGYDataAdapter(segy_path=segy_path,
-                           horizons_path_list=horizons_path_list,
-                           data_dict={'inlines': [[150, 300]]})
+    segy = PostStackAdapter2D(segy_path=segy_path,
+                              horizons_path_list=horizons_path_list,
+                              data_dict={'inline': [[150, 300]]})
 
     # Get number of inlines
     scan_result = segy.initial_scan()
